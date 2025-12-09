@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Échecs Emoji</title>
+<style>
+  body { display:flex; justify-content:center; align-items:center; height:100vh; background:#eee; }
+  #board { display:grid; grid-template-columns: 40px repeat(8,60px) 40px; grid-template-rows: 40px repeat(8,60px) 40px; }
+  .cell { width:60px; height:60px; display:flex; justify-content:center; align-items:center; font-size:36px; cursor:pointer; user-select:none; }
+  .white { background:#f5f5f5; }
+  .black { background:#1e1e1e; color:white; }
+  .highlight { background:yellow !important; }
+  .coord { display:flex; justify-content:center; align-items:center; font-size:16px; }
+</style>
+</head>
+<body>
+<div id="board"></div>
+
+<script>
+const letters = "ABCDEFGH";
+let board = [];
+let selected = null;
+let turn = 'white';
+
+const PIECES = {
+  'wP':'♙','wR':'♖','wN':'♘','wB':'♗','wQ':'♕','wK':'♔',
+  'bP':'♟','bR':'♜','bN':'♞','bB':'♝','bQ':'♛','bK':'♚'
+};
+
+function createBoard() {
+  // vide
+  board = Array.from({length:8},()=>Array(8).fill(null));
+  // pions
+  for(let i=0;i<8;i++){
+    board[1][i]='bP'; board[6][i]='wP';
+  }
+  // tours
+  board[0][0]='bR'; board[0][7]='bR'; board[7][0]='wR'; board[7][7]='wR';
+  // cavaliers
+  board[0][1]='bN'; board[0][6]='bN'; board[7][1]='wN'; board[7][6]='wN';
+  // fous
+  board[0][2]='bB'; board[0][5]='bB'; board[7][2]='wB'; board[7][5]='wB';
+  // dames
+  board[0][3]='bQ'; board[7][3]='wQ';
+  // rois
+  board[0][4]='bK'; board[7][4]='wK';
+}
+
+function renderBoard() {
+  const container = document.getElementById('board');
+  container.innerHTML = '';
+  for(let r=-1;r<9;r++){
+    for(let c=-1;c<9;c++){
+      const cell = document.createElement('div');
+      if(r===-1 || r===8 || c===-1 || c===8){
+        cell.className='coord';
+        if(r===-1 && c>=0 && c<8) cell.textContent=letters[c];
+        if(r===8 && c>=0 && c<8) cell.textContent=letters[c];
+        if(c===-1 && r>=0 && r<8) cell.textContent=8-r;
+        if(c===8 && r>=0 && r<8) cell.textContent=8-r;
+      } else {
+        cell.className='cell '+((r+c)%2===0?'white':'black');
+        cell.textContent = board[r][c]?PIECES[board[r][c]]:'';
+        cell.dataset.row = r; cell.dataset.col = c;
+        cell.onclick = cellClick;
+      }
+      container.appendChild(cell);
+    }
+  }
+}
+
+function cellClick(e){
+  const r=parseInt(this.dataset.row);
+  const c=parseInt(this.dataset.col);
+  const piece = board[r][c];
+  if(selected){
+    if(this.classList.contains('highlight')){
+      // déplace
+      board[r][c] = board[selected.row][selected.col];
+      board[selected.row][selected.col] = null;
+      selected = null;
+      turn = turn==='white'?'black':'white';
+      renderBoard();
+    } else {
+      selected=null; renderBoard();
+    }
+  } else if(piece && piece[0]===turn[0]){
+    selected={row:r,col:c};
+    highlightMoves(r,c,piece);
+  }
+}
+
+function highlightMoves(r,c,piece){
+  renderBoard();
+  const directions = {
+    'P':()=>{ // pion
+      const dir=piece[0]==='w'? -1:1;
+      if(inBoard(r+dir,c) && !board[r+dir][c]) document.querySelector(`[data-row='${r+dir}'][data-col='${c}']`).classList.add('highlight');
+      if((r===6 && piece==='wP') || (r===1 && piece==='bP')){
+        if(inBoard(r+2*dir,c) && !board[r+dir][c] && !board[r+2*dir][c]) document.querySelector(`[data-row='${r+2*dir}'][data-col='${c}']`).classList.add('highlight');
+      }
+      for(let dc of [-1,1]){
+        if(inBoard(r+dir,c+dc) && board[r+dir][c+dc] && board[r+dir][c+dc][0]!==piece[0])
+          document.querySelector(`[data-row='${r+dir}'][data-col='${c+dc}']`).classList.add('highlight');
+      }
+    },
+    'R':()=>linearMoves(r,c,[[-1,0],[1,0],[0,-1],[0,1]]),
+    'B':()=>linearMoves(r,c,[[-1,-1],[-1,1],[1,-1],[1,1]]),
+    'Q':()=>linearMoves(r,c,[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]),
+    'N':()=>{ // cavalier
+      const moves=[[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]];
+      moves.forEach(([dr,dc])=>{
+        if(inBoard(r+dr,c+dc) && (!board[r+dr][c+dc] || board[r+dr][c+dc][0]!==piece[0]))
+          document.querySelector(`[data-row='${r+dr}'][data-col='${c+dc}']`).classList.add('highlight');
+      });
+    },
+    'K':()=>{ // roi
+      for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){
+        if(dr===0 && dc===0) continue;
+        if(inBoard(r+dr,c+dc) && (!board[r+dr][c+dc] || board[r+dr][c+dc][0]!==piece[0]))
+          document.querySelector(`[data-row='${r+dr}'][data-col='${c+dc}']`).classList.add('highlight');
+      }
+    }
+  };
+  directions[piece[1]]();
+}
+
+function linearMoves(r,c,directions){
+  const piece = board[r][c];
+  directions.forEach(([dr,dc])=>{
+    let nr=r+dr,nc=c+dc;
+    while(inBoard(nr,nc)){
+      if(!board[nr][nc]) document.querySelector(`[data-row='${nr}'][data-col='${nc}']`).classList.add('highlight');
+      else { if(board[nr][nc][0]!==piece[0]) document.querySelector(`[data-row='${nr}'][data-col='${nc}']`).classList.add('highlight'); break; }
+      nr+=dr; nc+=dc;
+    }
+  });
+}
+
+function inBoard(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
+
+createBoard();
+renderBoard();
+</script>
+</body>
+</html>
